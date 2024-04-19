@@ -797,7 +797,7 @@ DECLARE_FIELD(SENSOR_PROFILE, enabled, ENUM)
 {
 	current_sensor(garmin)->sensor_enabled = data;
 }
-DECLARE_FIELD(SENSOR_PROFILE, sensor_type, UINT8)
+DECLARE_FIELD(SENSOR_PROFILE, sensor_type, ENUM)
 {
 	// 28 is tank pod
 	// start filling in next sensor after this record
@@ -1090,7 +1090,7 @@ DECLARE_MESG(SENSOR_PROFILE) = {
 		SET_FIELD(SENSOR_PROFILE, 0, ant_channel_id, UINT32Z),	// derived from the number engraved on the side
 		SET_FIELD(SENSOR_PROFILE, 2, name, STRING),
 		SET_FIELD(SENSOR_PROFILE, 3, enabled, ENUM),
-		SET_FIELD(SENSOR_PROFILE, 52, sensor_type, UINT8),	// 28 is tank pod
+		SET_FIELD(SENSOR_PROFILE, 52, sensor_type, ENUM),	// 28 is tank pod
 		SET_FIELD(SENSOR_PROFILE, 74, pressure_units, ENUM),	//  0 is PSI, 1 is KPA (unused), 2 is Bar
 		SET_FIELD(SENSOR_PROFILE, 75, rated_pressure, UINT16),
 		SET_FIELD(SENSOR_PROFILE, 76, reserve_pressure, UINT16),
@@ -1615,6 +1615,20 @@ static void add_sensor_string(garmin_parser_t *garmin, const char *desc, const s
 static dc_status_t
 garmin_parser_set_data (garmin_parser_t *garmin, const unsigned char *data, unsigned int size)
 {
+	// This list is empirical and somewhat speculative
+	// will have to be confirmed with Garmin
+	static const struct {
+		int id;
+		const char *name;
+	} models[] = {
+		{ 2859, "Descent Mk1" },
+		{ 2991, "Descent Mk1 APAC" },
+		{ 3258, "Descent Mk2(i)" },
+		{ 3542, "Descent Mk2s" },
+		{ 3702, "Descent Mk2 APAC" },
+		{ 4223, "Descent Mk3" },
+	};
+
 	/* Walk the data once without a callback to set up the core fields */
 	garmin->callback = NULL;
 	garmin->userdata = NULL;
@@ -1630,6 +1644,17 @@ garmin_parser_set_data (garmin_parser_t *garmin, const unsigned char *data, unsi
 	if (garmin->dive.firmware)
 		dc_field_add_string_fmt(&garmin->cache, "Firmware", "%u.%02u",
 			garmin->dive.firmware / 100, garmin->dive.firmware % 100);
+	if (garmin->dive.product) {
+		int i = 0;
+		for (i = 0; i < C_ARRAY_SIZE(models); i++)
+			if (models[i].id == garmin->dive.product)
+				break;
+
+		if (i < C_ARRAY_SIZE(models))
+			dc_field_add_string_fmt(&garmin->cache, "Model", "%s", models[i].name);
+		else
+			dc_field_add_string_fmt(&garmin->cache, "Model", "Unknown model ID: %u", garmin->dive.product);
+	}
 
 	// These seem to be the "real" GPS dive coordinates
 	add_gps_string(garmin, "GPS1", &garmin->gps.SESSION.entry);

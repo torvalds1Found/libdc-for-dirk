@@ -101,7 +101,6 @@ garmin_device_open (dc_device_t **out, dc_context_t *context, dc_iostream_t *ios
 	// in order to have only one entry for the Mk2, we don't use the Mk2/APAC model number in our code
 	device->use_mtp = (model == (0x0FFF & DESCENT_MK2));
 	device->mtp_device = NULL;
-	DEBUG(context, "Found Garmin with model 0x%x which is a %s\n", model, (device->use_mtp ? "Mk2/Mk2i" : "Mk1"));
 #endif
 
 	*out = (dc_device_t *) device;
@@ -331,9 +330,13 @@ mtp_get_file_list(dc_device_t *abstract, struct file_list *files)
 	for (i = 0; i < numrawdevices; i++) {
 		LIBMTP_devicestorage_t *storage;
 		// we only want to read from a Garmin Descent Mk2 device at this point
-		if (rawdevices[i].device_entry.vendor_id != GARMIN_VENDOR ||
-		    (rawdevices[i].device_entry.product_id != DESCENT_MK2 && rawdevices[i].device_entry.product_id != DESCENT_MK2_APAC)) {
+		if (rawdevices[i].device_entry.vendor_id != GARMIN_VENDOR) {
 			DEBUG(abstract->context, "Garmin/mtp: skipping raw device %04x/%04x",
+			      rawdevices[i].device_entry.vendor_id, rawdevices[i].device_entry.product_id);
+			continue;
+		}
+		if (rawdevices[i].device_entry.product_id != DESCENT_MK2 && rawdevices[i].device_entry.product_id != DESCENT_MK2_APAC) {
+			DEBUG(abstract->context, "Garmin/mtp: skipping Garmin raw device %04x/%04x, as it is not a dive computer / does not support MTP",
 			      rawdevices[i].device_entry.vendor_id, rawdevices[i].device_entry.product_id);
 			continue;
 		}
