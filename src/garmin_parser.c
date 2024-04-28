@@ -129,7 +129,7 @@ typedef struct garmin_parser_t {
 		unsigned int setpoint_low_cbar, setpoint_high_cbar;
 		unsigned int setpoint_low_switch_depth_mm, setpoint_high_switch_depth_mm;
 		unsigned int setpoint_low_switch_mode, setpoint_high_switch_mode;
-		dc_gasmix_t *current_gasmix;
+		dc_usage_t current_gasmix_usage;
 	} dive;
 
 	// I count nine (!) different GPS fields Hmm.
@@ -239,11 +239,11 @@ static void garmin_event(struct garmin_parser_t *garmin,
 		sample.gasmix = data;
 		garmin->callback(DC_SAMPLE_GASMIX, &sample, garmin->userdata);
 
-		dc_gasmix_t *gasmix = &garmin->cache.GASMIX[data];
-		if (!garmin->dive.current_gasmix || gasmix->usage != garmin->dive.current_gasmix->usage) {
+		dc_usage_t gasmix_usage = garmin->cache.GASMIX[data].usage;
+		if (gasmix_usage != garmin->dive.current_gasmix_usage) {
 			dc_sample_value_t sample2 = {0};
 			sample2.event.type = SAMPLE_EVENT_STRING;
-			if (gasmix->usage == DC_USAGE_DILUENT) {
+			if (gasmix_usage == DC_USAGE_DILUENT) {
 				sample2.event.name = "Switched to closed circuit";
 			} else {
 				sample2.event.name = "Switched to open circuit bailout";
@@ -252,7 +252,7 @@ static void garmin_event(struct garmin_parser_t *garmin,
 
 			garmin->callback(DC_SAMPLE_EVENT, &sample2, garmin->userdata);
 
-			garmin->dive.current_gasmix = gasmix;
+			garmin->dive.current_gasmix_usage = gasmix_usage;
 		}
 
 		return;
@@ -486,19 +486,22 @@ DECLARE_FIELD(ANY, timestamp, UINT32)
 {
 	garmin->record_data.timestamp = data;
 	if (garmin->callback) {
-		dc_sample_value_t sample = {0};
-
 		// Turn the timestamp relative to the beginning of the dive
-		if (data < garmin->dive.time)
+		if (data < garmin->dive.time) {
+			DEBUG(garmin->base.context, "Timestamp before dive start: %d (dive start: %d)", data, garmin->dive.time);
+
 			return;
-		data -= garmin->dive.time;
+		}
+		data -= garmin->dive.time - 1;
 
 		// Did we already do this?
-		if (data < garmin->record_data.time)
+		if (data == garmin->record_data.time)
 			return;
 
+		garmin->record_data.time = data;
+
 		// Now we're ready to actually update the sample times
-		garmin->record_data.time = data+1;
+		dc_sample_value_t sample = {0};
 		sample.time = data * 1000;
 		garmin->callback(DC_SAMPLE_TIME, &sample, garmin->userdata);
 	}
@@ -656,6 +659,7 @@ DECLARE_FIELD(ACTIVITY, event_group, UINT8) { }
 // SPORT
 DECLARE_FIELD(SPORT, sub_sport, ENUM) {
 	garmin->dive.sub_sport = (ENUM) data;
+	garmin->dive.current_gasmix_usage = DC_USAGE_OPEN_CIRCUIT;
 	dc_divemode_t val;
 	switch (data) {
 	case 55: val = DC_DIVEMODE_GAUGE;
@@ -663,7 +667,10 @@ DECLARE_FIELD(SPORT, sub_sport, ENUM) {
 	case 56:
 	case 57: val = DC_DIVEMODE_FREEDIVE;
 		break;
-	case 63: val = DC_DIVEMODE_CCR;
+	case 63:
+		val = DC_DIVEMODE_CCR;
+		garmin->dive.current_gasmix_usage = DC_USAGE_DILUENT;
+
 		break;
 	default: val = DC_DIVEMODE_OC;
 	}
@@ -797,7 +804,7 @@ DECLARE_FIELD(SENSOR_PROFILE, enabled, ENUM)
 {
 	current_sensor(garmin)->sensor_enabled = data;
 }
-DECLARE_FIELD(SENSOR_PROFILE, sensor_type, UINT8)
+DECLARE_FIELD(SENSOR_PROFILE, sensor_type, ENUM)
 {
 	// 28 is tank pod
 	// start filling in next sensor after this record
@@ -1090,7 +1097,7 @@ DECLARE_MESG(SENSOR_PROFILE) = {
 		SET_FIELD(SENSOR_PROFILE, 0, ant_channel_id, UINT32Z),	// derived from the number engraved on the side
 		SET_FIELD(SENSOR_PROFILE, 2, name, STRING),
 		SET_FIELD(SENSOR_PROFILE, 3, enabled, ENUM),
-		SET_FIELD(SENSOR_PROFILE, 52, sensor_type, UINT8),	// 28 is tank pod
+		SET_FIELD(SENSOR_PROFILE, 52, sensor_type, ENUM),	// 28 is tank pod
 		SET_FIELD(SENSOR_PROFILE, 74, pressure_units, ENUM),	//  0 is PSI, 1 is KPA (unused), 2 is Bar
 		SET_FIELD(SENSOR_PROFILE, 75, rated_pressure, UINT16),
 		SET_FIELD(SENSOR_PROFILE, 76, reserve_pressure, UINT16),
@@ -1337,7 +1344,10 @@ static int traverse_regular(struct garmin_parser_t *garmin,
 		}
 
 		if (field_desc) {
-			field_desc->parse(garmin, base_type, data);
+			if (field_nr == 253 && !msg_desc->maxfield)
+				DEBUG(garmin->base.context, "Ignoring timestamp field for undefined message.");
+			else
+				field_desc->parse(garmin, base_type, data);
 		} else {
 			unknown_field(garmin, data, msg_name, field_nr, base_type, len);
 		}
@@ -1521,7 +1531,12 @@ traverse_data(struct garmin_parser_t *garmin)
 			// Compressed records are like normal records
 			// with that added relative timestamp
 			DEBUG(garmin->base.context, "Compressed record for type %d", type);
-			parse_ANY_timestamp(garmin, time);
+
+			if (!(garmin->type_desc + type)->msg_desc->maxfield)
+				DEBUG(garmin->base.context, "Ignoring timestamp field for undefined message.");
+			else
+				parse_ANY_timestamp(garmin, time);
+
 			len = traverse_regular(garmin, data, datasize, type, &time);
 		} else if (record & 0x40) {	// Definition record?
 			len = traverse_definition(garmin, data, datasize, record);
@@ -1615,6 +1630,20 @@ static void add_sensor_string(garmin_parser_t *garmin, const char *desc, const s
 static dc_status_t
 garmin_parser_set_data (garmin_parser_t *garmin, const unsigned char *data, unsigned int size)
 {
+	// This list is empirical and somewhat speculative
+	// will have to be confirmed with Garmin
+	static const struct {
+		int id;
+		const char *name;
+	} models[] = {
+		{ 2859, "Descent Mk1" },
+		{ 2991, "Descent Mk1 APAC" },
+		{ 3258, "Descent Mk2(i)" },
+		{ 3542, "Descent Mk2s" },
+		{ 3702, "Descent Mk2 APAC" },
+		{ 4223, "Descent Mk3" },
+	};
+
 	/* Walk the data once without a callback to set up the core fields */
 	garmin->callback = NULL;
 	garmin->userdata = NULL;
@@ -1630,6 +1659,17 @@ garmin_parser_set_data (garmin_parser_t *garmin, const unsigned char *data, unsi
 	if (garmin->dive.firmware)
 		dc_field_add_string_fmt(&garmin->cache, "Firmware", "%u.%02u",
 			garmin->dive.firmware / 100, garmin->dive.firmware % 100);
+	if (garmin->dive.product) {
+		int i = 0;
+		for (i = 0; i < C_ARRAY_SIZE(models); i++)
+			if (models[i].id == garmin->dive.product)
+				break;
+
+		if (i < C_ARRAY_SIZE(models))
+			dc_field_add_string_fmt(&garmin->cache, "Model", "%s", models[i].name);
+		else
+			dc_field_add_string_fmt(&garmin->cache, "Model", "Unknown model ID: %u", garmin->dive.product);
+	}
 
 	// These seem to be the "real" GPS dive coordinates
 	add_gps_string(garmin, "GPS1", &garmin->gps.SESSION.entry);
