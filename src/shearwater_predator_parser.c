@@ -418,7 +418,6 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 	dc_parser_t *abstract = (dc_parser_t *) parser;
 	const unsigned char *data = parser->base.data;
 	unsigned int size = parser->base.size;
-	const char *ppo2_source = NULL;
 
 	if (parser->cached) {
 		return DC_STATUS_SUCCESS;
@@ -728,7 +727,7 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 	dc_field_add_string_fmt(&parser->cache, "Logversion", "%d%s", logversion, pnf ? "(PNF)" : "");
 
 	// Cache sensor calibration for later use
-	unsigned int nsensors = 0, ndefaults = 0;
+	unsigned int nsensors = 0;
 	unsigned int base = parser->opening[3] + (pnf ? 6 : 86);
 	for (size_t i = 0; i < 3; ++i) {
 		unsigned int calibration = array_uint16_be(data + base + 1 + i * 2);
@@ -741,25 +740,11 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 			parser->calibration[i] *= 2.2;
 		}
 		if (data[base] & (1 << i)) {
-			if (calibration == 2100) {
-				ndefaults++;
-			}
 			nsensors++;
 		}
 	}
-	if (nsensors && nsensors == ndefaults) {
-		// If all (calibrated) sensors still have their factory default
-		// calibration values (2100), they are probably not calibrated
-		// properly. To avoid returning incorrect ppO2 values to the
-		// application, they are manually disabled (e.g. marked as
-		// uncalibrated).
-		WARNING (abstract->context, "Disabled all O2 sensors due to a default calibration value.");
-		parser->calibrated = 0;
-		ppo2_source = "voted/averaged";
-	} else {
-		parser->calibrated = data[base];
-		ppo2_source = "cells";
-	}
+
+	parser->calibrated = data[base];
 
 	// Get the dive mode from the header (if available).
 	if (logversion >= 8) {
@@ -830,8 +815,6 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 	case M_CC:
 	case M_CC2:
 		DC_ASSIGN_FIELD(parser->cache, DIVEMODE, DC_DIVEMODE_CCR);
-		if (ppo2_source)
-			dc_field_add_string(&parser->cache, "PPO2 source", ppo2_source);
 		break;
 	case M_SC:
 		DC_ASSIGN_FIELD(parser->cache, DIVEMODE, DC_DIVEMODE_SCR);
