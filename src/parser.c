@@ -231,7 +231,7 @@ dc_parser_new (dc_parser_t **out, dc_device_t *device, const unsigned char data[
 		return DC_STATUS_INVALIDARGS;
 
 	status = dc_parser_new_internal (&parser, device->context, data, size,
-		dc_device_get_type (device), device->devinfo.model, 0);
+		dc_device_get_type (device), device->devinfo.model, device->devinfo.serial);
 	if (status != DC_STATUS_SUCCESS)
 		goto error_exit;
 
