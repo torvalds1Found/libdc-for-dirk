@@ -497,6 +497,8 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 
 	unsigned int offset = headersize;
 	unsigned int length = size - footersize;
+	unsigned int stack_time_total_s = 0;
+	unsigned int stack_time_remaining_s;
 	while (offset + parser->samplesize <= length) {
 		// Ignore empty samples.
 		if (array_isequal (data + offset, parser->samplesize, 0x00)) {
@@ -680,6 +682,14 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 					tank[1].pressure_reserve = array_uint16_be(data + offset + 17);
 				}
 			} else if (type == LOG_RECORD_OPENING_6) {
+				if (logversion >= 11) {
+					stack_time_total_s = array_uint16_be(data + offset + 1);
+					if (stack_time_total_s > 0) {
+						dc_field_add_string_fmt(&parser->cache, "Configured stack time [hh:mm:ss]", "%d:%02d:%02d", stack_time_total_s / 3600, (stack_time_total_s / 60) % 60, stack_time_total_s % 60);
+						stack_time_remaining_s = array_uint16_be(data + offset + 3);
+						dc_field_add_string_fmt(&parser->cache, "Remaining stack time at start [hh:mm:ss]", "%d:%02d:%02d", stack_time_remaining_s / 3600, (stack_time_remaining_s / 60) % 60, stack_time_remaining_s % 60);
+					}
+				}
 				if (logversion >= 13) {
 					tank[0].enabled = data[offset + 19];
 					memcpy (tank[0].name, data + offset + 20, sizeof (tank[0].name));
@@ -704,6 +714,14 @@ shearwater_predator_parser_cache (shearwater_predator_parser_t *parser)
 				}
 			}
 		} else if (type >= LOG_RECORD_CLOSING_0 && type <= LOG_RECORD_CLOSING_7) {
+			if (type == LOG_RECORD_CLOSING_6) {
+				if (logversion >= 11) {
+					if (stack_time_total_s > 0) {
+						stack_time_remaining_s = array_uint16_be(data + offset + 3);
+						dc_field_add_string_fmt(&parser->cache, "Remaining stack time at end [hh:mm:ss]", "%d:%02d:%02d", stack_time_remaining_s / 3600, (stack_time_remaining_s / 60) % 60, stack_time_remaining_s % 60);
+					}
+				}
+			}
 			// Closing record
 			parser->closing[type - LOG_RECORD_CLOSING_0] = offset;
 		} else if (type == LOG_RECORD_FINAL) {
