@@ -474,8 +474,8 @@ static const dc_descriptor_t g_descriptors[] = {
 	/* for the Mk1 we are using the model of the global model */
 	/* for the Mk2/Mk3 we are using the model of the Mk2 global model */
 	/* see garmin_parser.c for a more comprehensive list of models */
-	{"Garmin", "Descent Mk1", DC_FAMILY_GARMIN, 2859, DC_TRANSPORT_USBSTORAGE, dc_filter_garmin},
-	{"Garmin", "Descent Mk2(i)/Mk3(i)", DC_FAMILY_GARMIN, 3258, DC_TRANSPORT_USBSTORAGE, dc_filter_garmin},
+	{"Garmin", "Descent Mk1", DC_FAMILY_GARMIN, 2859, DC_TRANSPORT_USBSTORAGE, NULL},
+	{"Garmin", "Descent Mk2(i)/Mk3(i)", DC_FAMILY_GARMIN, 3258, DC_TRANSPORT_USBSTORAGE, NULL},
 	{"FIT", "File import", DC_FAMILY_GARMIN, 0, DC_TRANSPORT_USBSTORAGE, NULL },
 };
 
@@ -853,21 +853,6 @@ dc_filter_divesoft (dc_descriptor_t *descriptor, dc_transport_t transport, const
 
 	if (transport == DC_TRANSPORT_BLE) {
 		return DC_FILTER_INTERNAL (userdata, bluetooth, 0, dc_match_prefix);
-	}
-
-	return 1;
-}
-
-// Not merged upstream yet
-static int
-dc_filter_garmin (dc_descriptor_t *descriptor, dc_transport_t transport, const void *userdata)
-{
-	static const dc_usb_desc_t usbhid[] = {
-		{0x091e, 0x2b2b}, // Garmin Descent Mk1
-	};
-
-	if (transport == DC_TRANSPORT_USBSTORAGE) {
-		return DC_FILTER_INTERNAL (userdata, usbhid, 0, dc_match_usb);
 	}
 
 	return 1;
