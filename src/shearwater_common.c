@@ -58,8 +58,8 @@ shearwater_common_setup (shearwater_common_device_t *device, dc_context_t *conte
 		return status;
 	}
 
-	// Set the timeout for receiving data (3000ms).
-	status = dc_iostream_set_timeout (device->iostream, 3000);
+	// Set the timeout for receiving data (12s).
+	status = dc_iostream_set_timeout (device->iostream, 12 * 1000);
 	if (status != DC_STATUS_SUCCESS) {
 		ERROR (context, "Failed to set the timeout.");
 		return status;
@@ -696,6 +696,9 @@ dc_status_t shearwater_common_get_model(shearwater_common_device_t *device, unsi
 
 	// Convert and map to the model number.
 	unsigned int hardware = array_uint16_be (rsp_hardware);
+
+	DEBUG(device->base.context, "Hardware type: 0x%04x", hardware);
+
 	switch (hardware) {
 	case 0x0101:
 	case 0x0202:
