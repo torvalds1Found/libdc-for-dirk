@@ -14,6 +14,7 @@ typedef struct dc_field_cache {
 	double ATMOSPHERIC;
 	dc_divemode_t DIVEMODE;
 	unsigned int GASMIX_COUNT;
+	unsigned int TANK_COUNT;
 	dc_salinity_t SALINITY;
 	dc_gasmix_t GASMIX[MAXGASES];
 

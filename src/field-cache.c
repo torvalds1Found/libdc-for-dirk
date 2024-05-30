@@ -85,8 +85,9 @@ dc_field_get(dc_field_cache_t *cache, dc_field_type_t type, unsigned int flags, 
 	case DC_FIELD_AVGDEPTH:
 		return DC_FIELD_VALUE(*cache, value, AVGDEPTH);
 	case DC_FIELD_GASMIX_COUNT:
-	case DC_FIELD_TANK_COUNT:
 		return DC_FIELD_VALUE(*cache, value, GASMIX_COUNT);
+	case DC_FIELD_TANK_COUNT:
+		return DC_FIELD_VALUE(*cache, value, TANK_COUNT);
 	case DC_FIELD_GASMIX:
 		if (flags >= MAXGASES)
 			break;
