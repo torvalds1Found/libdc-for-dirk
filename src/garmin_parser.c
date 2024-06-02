@@ -1696,8 +1696,8 @@ garmin_parser_set_data (garmin_parser_t *garmin, const unsigned char *data, unsi
 	//
 	// There's no way to match them up unless they are an identity
 	// mapping, so having two different ones doesn't actually work.
-	if (garmin->dive.nr_sensor > garmin->cache.GASMIX_COUNT)
-		DC_ASSIGN_FIELD(garmin->cache, GASMIX_COUNT, garmin->dive.nr_sensor);
+	if (garmin->dive.nr_sensor > garmin->cache.TANK_COUNT)
+		DC_ASSIGN_FIELD(garmin->cache, TANK_COUNT, garmin->dive.nr_sensor);
 
 	for (int i = 0; i < garmin->dive.nr_sensor; i++) {
 		static const char *name[] = { "Sensor 1", "Sensor 2", "Sensor 3", "Sensor 4", "Sensor 5" };
